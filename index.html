@@ -517,6 +517,22 @@
       return cell;
     }
 
+    function formatCost(value) {
+      const text = String(value ?? "").trim();
+      if (!text) return "—";
+
+      // Format numeric values; leave text such as "Call for pricing" unchanged.
+      const numeric = Number(text.replace(/[₹,\s]/g, ""));
+      if (Number.isFinite(numeric)) {
+        return `₹${numeric.toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })}`;
+      }
+
+      return text;
+    }
+
     function renderTable(rows) {
       tableBody.replaceChildren();
       emptyState.hidden = rows.length !== 0;
@@ -539,19 +555,10 @@
         row.appendChild(departmentCell);
 
         addCell(row, "Recommended Test", "test-name", item.test);
-
-        addCell(
-          row,
-          "Estimated Charges",
-          "price",
-          `₹${Number(item.cost).toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          })}`
-        );
-
+        addCell(row, "Estimated Charges", "price", formatCost(item.cost));
         addCell(row, "Report Schedule", "schedule", item.schedule || "—");
         addCell(row, "Instruction", "instruction", item.instruction || "—");
+
         tableBody.appendChild(row);
       }
     }
@@ -565,6 +572,7 @@
           item.organ,
           item.type,
           item.test,
+          item.cost,
           item.schedule,
           item.instruction
         ].join(" ").toLowerCase();
@@ -715,26 +723,26 @@
       }
 
       const records = csvRows.slice(1).map(row => ({
-        organ: row[organIndex] || "",
+        organ: (row[organIndex] || "").trim(),
         type: normalizeDepartment(row[typeIndex] || ""),
-        test: row[testIndex] || "",
-        cost: Number(String(row[costIndex] || "").replace(/[₹,\s]/g, "")),
-        schedule: scheduleIndex < 0 ? "" : row[scheduleIndex] || "",
-        instruction: instructionIndex < 0 ? "" : row[instructionIndex] || ""
+        test: (row[testIndex] || "").trim(),
+        cost: (row[costIndex] || "").trim(),
+        schedule: scheduleIndex < 0 ? "" : (row[scheduleIndex] || "").trim(),
+        instruction: instructionIndex < 0 ? "" : (row[instructionIndex] || "").trim()
       })).filter(item =>
-        item.organ || item.type || item.test || item.schedule || item.instruction
+        item.organ || item.type || item.test || item.cost || item.schedule || item.instruction
       );
 
       const invalid = records.find(item =>
         !item.organ ||
         !["Histopathology", "Cytology"].includes(item.type) ||
         !item.test ||
-        !Number.isFinite(item.cost)
+        !item.cost
       );
 
       if (!records.length || invalid) {
         throw new Error(
-          "CSV records must have an organ, a Histopathology or Cytology department, a test, and a numeric cost."
+          "CSV records must have an organ, a Histopathology or Cytology department, a test, and a cost."
         );
       }
 
@@ -792,9 +800,11 @@
 
       const normalized = records.map(item => ({
         organ: String(item.organ ?? item["Organ/Specimen"] ?? "").trim(),
-        type: normalizeDepartment(item.type ?? item["Department Type"] ?? item.department ?? ""),
+        type: normalizeDepartment(
+          item.type ?? item["Department Type"] ?? item.department ?? ""
+        ),
         test: String(item.test ?? item["Recommended Test"] ?? "").trim(),
-        cost: Number(String(item.cost ?? item["Estimated Cost"] ?? "").replace(/[₹,\s]/g, "")),
+        cost: String(item.cost ?? item["Estimated Cost"] ?? "").trim(),
         schedule: String(item.schedule ?? item["Report Schedule"] ?? "").trim(),
         instruction: String(item.instruction ?? item["Instruction"] ?? "").trim()
       }));
@@ -803,11 +813,11 @@
         !item.organ ||
         !["Histopathology", "Cytology"].includes(item.type) ||
         !item.test ||
-        !Number.isFinite(item.cost)
+        !item.cost
       );
 
       if (invalid) {
-        throw new Error("Each record needs an organ, valid department, test, and numeric cost.");
+        throw new Error("Each record needs an organ, valid department, test, and cost.");
       }
 
       return normalized;
